@@ -145,7 +145,7 @@ void callback(char *topic, byte *message, unsigned int length)
         {
             // Send JSON with settings
             Serial.println("Sending settings");
-            load_settings();
+            load_settings();  // Get save settings in flash memory
             client.publish(mqtt_topic_status, convert_json().c_str());
         }
         else if (messageTemp == "status")
@@ -169,6 +169,7 @@ void callback(char *topic, byte *message, unsigned int length)
         {
             save_settings();
             apply_settings();
+            client.publish(mqtt_topic_request, "status"); // Send status to confirm
         }
     }
 }
