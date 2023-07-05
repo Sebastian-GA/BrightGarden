@@ -67,6 +67,12 @@ String json_data;
 StaticJsonDocument<200> json_doc;
 String default_settings = "{\"lamp1\":{\"enable\":true,\"brightness\":100,\"time\":2},\"lamp2\":{\"enable\":true,\"brightness\":100,\"time\":2}}";
 
+// PWM definitions
+const int freq = 5000;
+const int led1_channel = 0;
+const int led2_channel = 1;
+const int resolution = 12;
+
 String convert_json()
 {
     // Convert JSON to string
@@ -99,8 +105,15 @@ void load_settings()
 void apply_settings()
 {
     // Apply settings to LEDs
-    digitalWrite(LED1_PIN, json_doc["lamp1"]["enable"]);
-    digitalWrite(LED2_PIN, json_doc["lamp2"]["enable"]);
+    if (json_doc["lamp1"]["enable"])
+        ledcWrite(led1_channel, json_doc["lamp1"]["brightness"].as<int>() * 40.95);
+    else
+        ledcWrite(led1_channel, 0);
+
+    if (json_doc["lamp2"]["enable"])
+        ledcWrite(led2_channel, json_doc["lamp2"]["brightness"].as<int>() * 40.95);
+    else
+        ledcWrite(led2_channel, 0);
 }
 
 void setup_wifi()
@@ -145,7 +158,7 @@ void callback(char *topic, byte *message, unsigned int length)
         {
             // Send JSON with settings
             Serial.println("Sending settings");
-            load_settings();  // Get save settings in flash memory
+            load_settings(); // Get save settings in flash memory
             client.publish(mqtt_topic_status, convert_json().c_str());
         }
         else if (messageTemp == "status")
@@ -197,10 +210,12 @@ void reconnect()
 
 void setup()
 {
-    // Setup pins
+    // Setup LEDs
     pinMode(LED0_PIN, OUTPUT);
-    pinMode(LED1_PIN, OUTPUT);
-    pinMode(LED2_PIN, OUTPUT);
+    ledcSetup(led1_channel, freq, resolution);
+    ledcSetup(led2_channel, freq, resolution);
+    ledcAttachPin(LED1_PIN, led1_channel);
+    ledcAttachPin(LED2_PIN, led2_channel);
 
     Serial.begin(115200);
     delay(10);
