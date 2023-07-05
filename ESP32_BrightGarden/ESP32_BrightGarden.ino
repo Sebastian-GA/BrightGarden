@@ -12,6 +12,8 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
+#include <Preferences.h>
+#include <ArduinoJson.h>
 
 #include "credentials.h"
 
@@ -56,9 +58,50 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
-
-unsigned long lastMsg = 0;
 char msg[50];
+
+// Save settings and JSON definitions
+Preferences prefs;
+
+String json_data;
+StaticJsonDocument<200> json_doc;
+String default_settings = "{\"lamp1\":{\"enable\":true,\"brightness\":100,\"time\":2},\"lamp2\":{\"enable\":true,\"brightness\":100,\"time\":2}}";
+
+String convert_json()
+{
+    // Convert JSON to string
+    json_data = "";
+    serializeJson(json_doc, json_data);
+    return json_data;
+}
+
+void save_settings()
+{
+    // Save settings to flash memory
+    prefs.putString("settings", convert_json());
+}
+
+void load_settings()
+{
+    json_data = prefs.getString("settings", default_settings);
+    DeserializationError error = deserializeJson(json_doc, json_data);
+    if (error)
+    {
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.f_str());
+        return;
+    }
+
+    Serial.print("Loaded settings: ");
+    Serial.println(convert_json());
+}
+
+void apply_settings()
+{
+    // Apply settings to LEDs
+    digitalWrite(LED1_PIN, json_doc["lamp1"]["enable"]);
+    digitalWrite(LED2_PIN, json_doc["lamp2"]["enable"]);
+}
 
 void setup_wifi()
 {
@@ -95,22 +138,38 @@ void callback(char *topic, byte *message, unsigned int length)
     }
     Serial.println();
 
+    // ----------------------- Process topic and message ----------------------- //
     if (String(topic) == mqtt_topic_request)
     {
         if (messageTemp == "settings")
         {
-            // Send JSON with current settings
-
-            client.publish(mqtt_topic_status, JSON_settings);
+            // Send JSON with settings
+            Serial.println("Sending settings");
+            load_settings();
+            client.publish(mqtt_topic_status, convert_json().c_str());
         }
-        // else if (messageTemp == "status")
-        // {
-        //     // Send JSON with status
-        // }
+        else if (messageTemp == "status")
+        {
+            // Send JSON with status
+            Serial.println("Sending status");
+            client.publish(mqtt_topic_status, "{\"status\":\"OK\"}");
+        }
     }
     else if (String(topic) == mqtt_topic_setup)
     {
-        // Process JSON with new settings and save them
+        // Process JSON and update settings
+        DeserializationError error = deserializeJson(json_doc, messageTemp);
+
+        if (error)
+        {
+            Serial.print(F("deserializeJson() failed: "));
+            Serial.println(error.f_str());
+        }
+        else
+        {
+            save_settings();
+            apply_settings();
+        }
     }
 }
 
@@ -145,6 +204,11 @@ void setup()
     Serial.begin(115200);
     delay(10);
 
+    // Load settings
+    prefs.begin("BrightGarden", false);
+    load_settings();
+    apply_settings();
+
     // Connect to WiFi and MQTT Broker
     setup_wifi();
     espClient.setCACert(root_ca);
@@ -159,14 +223,4 @@ void loop()
         reconnect();
     }
     client.loop();
-
-    long now = millis();
-    if (now - lastMsg > 5000)
-    {
-        lastMsg = now;
-
-        Serial.print("Sending: ");
-        Serial.println(now);
-        client.publish(mqtt_topic_status, String(now).c_str());
-    }
 }
