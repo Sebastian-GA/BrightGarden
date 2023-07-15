@@ -11,13 +11,11 @@
  */
 
 #include <ArduinoJson.h>
-#include <Firebase_ESP_Client.h>
 #include <Preferences.h>
 #include <WiFi.h>
 
 #include "AES128.h"
-#include "addons/RTDBHelper.h"
-#include "addons/TokenHelper.h"
+#include "FirebaseESP32.h"
 #include "credentials.h"
 
 // Pin definitions
@@ -27,12 +25,9 @@
 
 // Firebase definitions
 FirebaseData fbdo;
-FirebaseAuth auth;
-FirebaseConfig config;
 
 // Connection status
 bool wifiOk = false;
-bool signupOk = false;
 bool gotSettings = false;
 
 // Save settings and JSON definitions
@@ -98,8 +93,12 @@ void apply_settings() {
 }
 
 void update_settings(String messageStr) {
+    // Remove characters added by Firebase
+    messageStr.replace("\\\"","");  // Remove \"
+    messageStr.replace("\\", "");  // Remove \  (Base64 coddification don't use \ so there is no problem)
     Serial.print("Received settings: ");
     Serial.println(messageStr);
+    
     // Decrypt message
     sprintf(ciphertext, "%s", messageStr.c_str());
     messageStr = aes_decrypt(ciphertext);
@@ -158,35 +157,20 @@ void setup() {
     if (!wifiOk) {
         // If WiFi connection failed, use last saved settings
         Serial.println("WiFi connection failed");
+        Serial.println("Using last saved settings");
         apply_settings();
     } else {
-        // If WiFi connection succeeded, try to sign up
-        // Connect to Firebase
+        // If WiFi connection succeeded, connect to Firebase
         Serial.println();
-        config.api_key = api_key;
-        config.database_url = database_url;
-
-        for (uint8_t i = 0; i < 3; i++) {  // Try to sign up 3 times
-            if (Firebase.signUp(&config, &auth, "", "")) {
-                Serial.println("Sign up succeeded");
-                signupOk = true;
-                break;
-            } else {
-                Serial.println("Sign up failed");
-                Serial.printf("REASON: %s\n", config.signer.signupError.message.c_str());
-            }
-            delay(500);
-        }
-
-        config.token_status_callback = tokenStatusCallback;
-
-        Firebase.begin(&config, &auth);
+        Serial.println("Connecting to Firebase");
+        Firebase.begin(database_url, api_key);
         Firebase.reconnectWiFi(true);
 
         // Get settings from Firebase
-        if (Firebase.ready() && signupOk) {
+        delay(100);
+        if (Firebase.ready()) {
             for (uint8_t i = 0; i < 3; i++) {  // Try to get settings 3 times
-                if (Firebase.getString(fbdo, "BrightGarden_FireBase/settings")) {
+                if (Firebase.getJSON(fbdo, "BrightGarden_FireBase/settings")) {
                     Serial.println("Get settings succeeded");
                     update_settings(fbdo.stringData());
                     gotSettings = true;
