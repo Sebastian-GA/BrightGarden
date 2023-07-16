@@ -23,6 +23,8 @@
 #define LED1_PIN 12
 #define LED2_PIN 13
 
+#define MIN_TO_uS_FACTOR 60000000
+
 // Firebase definitions
 FirebaseData fbdo;
 
@@ -90,19 +92,25 @@ void apply_settings() {
         ledcWrite(led2_channel, json_doc["lamp2"]["brightness"].as<int>() * 40.95);
     else
         ledcWrite(led2_channel, 0);
+
+    // Leds are turned on for 10 seconds
+    delay(10000);
+    digitalWrite(LED0_PIN, LOW);
+    ledcWrite(led1_channel, 0);
+    ledcWrite(led2_channel, 0);
 }
 
 void update_settings(String messageStr) {
     // Remove characters added by Firebase
-    messageStr.replace("\\\"","");  // Remove \"
-    messageStr.replace("\\", "");  // Remove \  (Base64 coddification don't use \ so there is no problem)
-    Serial.print("Received settings: ");
-    Serial.println(messageStr);
-    
+    messageStr.replace("\\\"", "");  // Remove \"
+    messageStr.replace("\\", "");    // Remove \  (Base64 coddification don't use \ so there is no problem)
+    // Serial.print("Received string: ");
+    // Serial.println(messageStr);
+
     // Decrypt message
     sprintf(ciphertext, "%s", messageStr.c_str());
     messageStr = aes_decrypt(ciphertext);
-    Serial.print("Decrypted settings: ");
+    Serial.print("Received settings: ");
     Serial.println(messageStr);
 
     // Process JSON and update settings
@@ -118,15 +126,18 @@ void update_settings(String messageStr) {
 }
 
 void setup() {
+    // Setup serial port
+    Serial.begin(115200);
+    while (!Serial)
+        ;
+    Serial.println("");
+
     // Setup LEDs
     pinMode(LED0_PIN, OUTPUT);
     ledcSetup(led1_channel, freq, resolution);
     ledcAttachPin(LED1_PIN, led1_channel);
     ledcSetup(led2_channel, freq, resolution);
     ledcAttachPin(LED2_PIN, led2_channel);
-
-    Serial.begin(115200);
-    delay(10);
 
     // Initialize AES128
     aes_init();
@@ -136,28 +147,28 @@ void setup() {
     load_settings();
 
     // Connect to WiFi
-    Serial.println();
     Serial.print("Connecting to ");
     Serial.println(ssid);
     WiFi.begin(ssid, password);
 
-    for (uint8_t i = 0; i < 10; i++) {  // Try to connect 10 times
+    for (uint8_t i = 0; i < 20; i++) {  // Try to connect 20 times
         if (WiFi.status() == WL_CONNECTED) {
             Serial.println("");
             Serial.println("WiFi connection succeeded");
-            Serial.println("IP address: ");
-            Serial.println(WiFi.localIP());
+            // Serial.print("IP address: ");
+            // Serial.println(WiFi.localIP());
             wifiOk = true;
             break;
         }
         Serial.print(".");
-        delay(500);
+        delay(200);
     }
 
     if (!wifiOk) {
         // If WiFi connection failed, use last saved settings
         Serial.println("WiFi connection failed");
         Serial.println("Using last saved settings");
+        digitalWrite(LED0_PIN, HIGH);
         apply_settings();
     } else {
         // If WiFi connection succeeded, connect to Firebase
@@ -167,9 +178,8 @@ void setup() {
         Firebase.reconnectWiFi(true);
 
         // Get settings from Firebase
-        delay(100);
         if (Firebase.ready()) {
-            for (uint8_t i = 0; i < 3; i++) {  // Try to get settings 3 times
+            for (uint8_t i = 0; i < 5; i++) {  // Try to get settings 5 times
                 if (Firebase.getJSON(fbdo, "BrightGarden_FireBase/settings")) {
                     Serial.println("Get settings succeeded");
                     update_settings(fbdo.stringData());
@@ -179,17 +189,24 @@ void setup() {
                     Serial.println("Get settings failed");
                     Serial.printf("REASON: %s\n", fbdo.errorReason().c_str());
                 }
-                delay(500);
+                delay(200);
             }
         }
 
         // If settings were not retrieved, use last saved settings
         if (!gotSettings) {
+            Serial.println("Get settings failed");
             Serial.println("Using last saved settings");
             apply_settings();
         }
 
     }  // End of WiFi connection
+
+    // Go to sleep
+    Serial.println();
+    Serial.println("Going to sleep");
+    esp_sleep_enable_timer_wakeup((MIN_TO_uS_FACTOR * json_doc["time"].as<int>()) - micros());  // Sleep for the time specified in settings
+    esp_deep_sleep_start();
 }
 
 void loop() {
