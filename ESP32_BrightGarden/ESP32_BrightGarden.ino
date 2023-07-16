@@ -6,8 +6,8 @@
  *          Leandro Gualdrón
  *
  * Connections:
- *              - LED1: GPIO 15
- *              - LED2: GPIO 4
+ *              - LED1: GPIO 12
+ *              - LED2: GPIO 13
  */
 
 #include <ArduinoJson.h>
@@ -20,8 +20,8 @@
 
 // Pin definitions
 #define LED0_PIN 2  // Built in LED for debugging and notifications
-#define LED1_PIN 15
-#define LED2_PIN 4
+#define LED1_PIN 12
+#define LED2_PIN 13
 
 // Firebase definitions
 FirebaseData fbdo;
