@@ -17,6 +17,15 @@
 #include "AES128.h"
 #include "FirebaseESP32.h"
 #include "credentials.h"
+/* credentials.h
+// WiFi Credentials
+const char *ssid = "ssid";
+const char *password = "password";
+
+// Firebase
+const char *database_url = "database_url";
+const char *api_key = "api_key";
+*/
 
 // Pin definitions
 #define LED0_PIN 2  // Built in LED for debugging and notifications
